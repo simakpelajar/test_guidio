@@ -34,6 +34,25 @@ migrate_working_dir/
 /coverage/
 /android/build/
 
+# Android local / build artifacts (do not commit)
+/android/local.properties
+/android/.gradle/
+/android/gradle-wrapper.jar
+/android/gradle/
+/android/app/.cxx/
+/android/app/build/
+
+# iOS local / build artifacts
+/ios/Flutter/ephemeral/
+/ios/Podfile.lock
+/ios/Pods/
+
+# Flutter ephemeral files
+**/ephemeral/
+.flutter-plugins
+.flutter-plugins-dependencies
+.dart_tool/
+
 # Symbolication related
 app.*.symbols
 
