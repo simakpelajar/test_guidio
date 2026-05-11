@@ -7,5 +7,62 @@
   "mic_start": "Mulai mikrofon",
   "mic_stop": "Hentikan mikrofon",
   "camera": "Kamera",
-  "other": "Lainnya"
+  "other": "Lainnya",
+  "camera_permission_required": "Izin kamera diperlukan",
+  "camera_processing": "Memproses kamera...",
+  "camera_turn_off": "Matikan Kamera",
+  "camera_turn_on": "Nyalakan Kamera",
+  "mic_turn_off": "Matikan Mikrofon",
+  "mic_turn_on": "Nyalakan Mikrofon",
+  "camera_health_check": "Cek Kesehatan Kamera",
+  "camera_health_check_enable_hint": "Nyalakan kamera untuk cek kesehatan",
+  "detection_sample": "1 meter ada laptop depan anda",
+  "camera_not_ready": "Kamera belum siap. Mohon tunggu...",
+  "health_orientation_skipped": "Orientasi: Tidak perlu validasi",
+  "health_alert_too_fast": "Gerakan terlalu cepat, mohon perlahan",
+  "health_alert_dark": "Cahaya terlalu gelap",
+  "health_alert_lens_blocked": "Kamera tertutup, periksa lensa",
+  "health_analyze_failed": "Gagal menganalisis frame. Coba lagi.",
+  "health_blur_bad": "Blur: Terlalu blur (score: {score})",
+  "@health_blur_bad": {
+    "placeholders": {
+      "score": {}
+    }
+  },
+  "health_blur_good": "Blur: Pergerakan stabil (score: {score})",
+  "@health_blur_good": {
+    "placeholders": {
+      "score": {}
+    }
+  },
+  "health_light_bad": "Cahaya: Terlalu gelap ({percent}%)",
+  "@health_light_bad": {
+    "placeholders": {
+      "percent": {}
+    }
+  },
+  "health_light_good": "Cahaya: Cukup ({percent}%)",
+  "@health_light_good": {
+    "placeholders": {
+      "percent": {}
+    }
+  },
+  "health_lens_bad": "Lensa: Tertutup ({percent}% gelap)",
+  "@health_lens_bad": {
+    "placeholders": {
+      "percent": {}
+    }
+  },
+  "health_lens_good": "Lensa: Bersih ({percent}% gelap)",
+  "@health_lens_good": {
+    "placeholders": {
+      "percent": {}
+    }
+  },
+  "health_ready_message": "Kamera siap untuk navigasi!",
+  "health_issues_message": "Ada masalah:",
+  "health_action_label": "Aksi",
+  "health_ready_title": "Kamera Siap",
+  "health_issues_title": "Ada Masalah",
+  "error_prefix": "Error"
 }

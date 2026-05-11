@@ -8,4 +8,61 @@
   "mic_stop": "Stop microphone",
   "camera": "Camera",
   "other": "Other",
+  "camera_permission_required": "Camera permission is required",
+  "camera_processing": "Processing camera...",
+  "camera_turn_off": "Turn off camera",
+  "camera_turn_on": "Turn on camera",
+  "mic_turn_off": "Turn off microphone",
+  "mic_turn_on": "Turn on microphone",
+  "camera_health_check": "Check camera health",
+  "camera_health_check_enable_hint": "Turn on camera to check health",
+  "detection_sample": "There is a laptop one meter in front of you",
+  "camera_not_ready": "Camera is not ready. Please wait...",
+  "health_orientation_skipped": "Orientation: Skipped validation",
+  "health_alert_too_fast": "Movement too fast, please slow down",
+  "health_alert_dark": "Lighting is too dark",
+  "health_alert_lens_blocked": "Camera is blocked, check the lens",
+  "health_analyze_failed": "Failed to analyze frame. Please try again.",
+  "health_blur_bad": "Blur: Too blurry (score: {score})",
+  "@health_blur_bad": {
+    "placeholders": {
+      "score": {}
+    }
+  },
+  "health_blur_good": "Blur: Movement is stable (score: {score})",
+  "@health_blur_good": {
+    "placeholders": {
+      "score": {}
+    }
+  },
+  "health_light_bad": "Light: Too dark ({percent}%)",
+  "@health_light_bad": {
+    "placeholders": {
+      "percent": {}
+    }
+  },
+  "health_light_good": "Light: Sufficient ({percent}%)",
+  "@health_light_good": {
+    "placeholders": {
+      "percent": {}
+    }
+  },
+  "health_lens_bad": "Lens: Blocked ({percent}% dark)",
+  "@health_lens_bad": {
+    "placeholders": {
+      "percent": {}
+    }
+  },
+  "health_lens_good": "Lens: Clear ({percent}% dark)",
+  "@health_lens_good": {
+    "placeholders": {
+      "percent": {}
+    }
+  },
+  "health_ready_message": "Camera is ready for navigation!",
+  "health_issues_message": "Issues detected:",
+  "health_action_label": "Action",
+  "health_ready_title": "Camera Ready",
+  "health_issues_title": "Issues Found",
+  "error_prefix": "Error"
 }

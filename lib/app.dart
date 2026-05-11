@@ -29,6 +29,19 @@ class MyApp extends StatelessWidget {
 						home: const HomePage(),
 						localizationsDelegates: AppLocalizations.localizationsDelegates,
 						supportedLocales: AppLocalizations.supportedLocales,
+						localeResolutionCallback: (locale, supportedLocales) {
+							if (locale == null) {
+								return const Locale('id');
+							}
+
+							for (final supportedLocale in supportedLocales) {
+								if (supportedLocale.languageCode == locale.languageCode) {
+									return supportedLocale;
+								}
+							}
+
+							return const Locale('id');
+						},
 					),
 				);
 			},

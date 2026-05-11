@@ -4,12 +4,17 @@ import 'package:test_guidio/l10n/app_localizations.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:image/image.dart' as img;
 import 'dart:async';
+import '../../domain/entities/camera_health_evaluation.dart';
+import '../../data/services/camera_health_check_service.dart';
 import '../cubit/camera_cubit.dart';
 import '../cubit/camera_state.dart';
+import '../widgets/safe_camera_preview.dart';
 import '../../../../shared/core/constant/app_colors.dart';
 import '../../../../shared/core/constant/app_sizes.dart';
+import '../../../../shared/core/infrastructure/app_logger.dart';
+
+final _log = getLogger('HomePage');
 
 class HomePage extends StatefulWidget {
 	const HomePage({super.key});
@@ -18,97 +23,10 @@ class HomePage extends StatefulWidget {
 	State<HomePage> createState() => _HomePageState();
 }
 
-class _SafeCameraPreview extends StatefulWidget {
-	final CameraController controller;
-
-	const _SafeCameraPreview({required this.controller});
-
-	@override
-	State<_SafeCameraPreview> createState() => _SafeCameraPreviewState();
-}
-
-class _SafeCameraPreviewState extends State<_SafeCameraPreview> {
-	late CameraController _localController;
-	bool _isControllerValid = true;
-
-	@override
-	void initState() {
-		super.initState();
-		_localController = widget.controller;
-		_verifyController();
-	}
-
-	void _verifyController() {
-		try {
-			// Check if controller is still valid before using it
-			if (_localController.value.isInitialized) {
-				_isControllerValid = true;
-			} else {
-				_isControllerValid = false;
-			}
-		} catch (e) {
-			print('Controller verification failed: $e');
-			_isControllerValid = false;
-		}
-	}
-
-	@override
-	void didUpdateWidget(_SafeCameraPreview oldWidget) {
-		super.didUpdateWidget(oldWidget);
-		if (oldWidget.controller != widget.controller) {
-			_localController = widget.controller;
-			_verifyController();
-		}
-	}
-
-	@override
-	Widget build(BuildContext context) {
-		_verifyController();
-		
-		if (!_isControllerValid) {
-			return Container(
-				color: Colors.black,
-				child: Center(
-					child: Icon(Icons.camera_alt, color: Colors.white54, size: AppSizes.iconCameraMedium),
-				),
-			);
-		}
-
-		try {
-			final previewSize = _localController.value.previewSize;
-			if (previewSize == null) {
-				return CameraPreview(_localController);
-			}
-
-			// Keep native preview aspect ratio to avoid stretched/soft rendering.
-			return ClipRect(
-				child: OverflowBox(
-					alignment: Alignment.center,
-					child: FittedBox(
-						fit: BoxFit.cover,
-						child: SizedBox(
-							width: previewSize.height,
-							height: previewSize.width,
-							child: CameraPreview(_localController),
-						),
-					),
-				),
-			);
-		} catch (e) {
-			print('Camera preview error: $e');
-			return Container(
-				color: Colors.black,
-				child: Center(
-					child: Icon(Icons.camera_alt, color: Colors.white54, size: AppSizes.iconCameraMedium),
-				),
-			);
-		}
-	}
-}
-
 class _HomePageState extends State<HomePage> {
 	CameraController? _controller;
 	bool _isHealthCheckRunning = false;
+	final CameraHealthCheckService _healthCheckService = CameraHealthCheckService();
 
 	@override
 	void initState() {
@@ -124,25 +42,27 @@ class _HomePageState extends State<HomePage> {
 			if (mounted) {
 				context.read<CameraCubit>().toggleCamera();
 			}
-		} catch (e) {
-			print('Error: $e');
+		} catch (e, stackTrace) {
+			_log.severe('Failed to request permissions and start camera', e, stackTrace);
 		}
 	}
 
 	Future<void> _requestPermissions() async {
+		final l10n = AppLocalizations.of(context)!;
+
 		// Request Camera Permission
 		final cameraStatus = await Permission.camera.request();
-		print('Camera permission: $cameraStatus');
+		_log.info('Camera permission status: $cameraStatus');
 
 		if (cameraStatus.isDenied) {
-			print('Camera permission denied');
+			_log.warning('Camera permission denied');
 			if (mounted) {
 				ScaffoldMessenger.of(context).showSnackBar(
-					const SnackBar(content: Text('Camera permission diperlukan')),
+					SnackBar(content: Text(l10n.camera_permission_required)),
 				);
 			}
 		} else if (cameraStatus.isPermanentlyDenied) {
-			print('Camera permission permanently denied');
+			_log.warning('Camera permission permanently denied');
 			if (mounted) {
 				openAppSettings();
 			}
@@ -150,149 +70,52 @@ class _HomePageState extends State<HomePage> {
 
 		// Request Microphone Permission
 		final micStatus = await Permission.microphone.request();
-		print('Microphone permission: $micStatus');
+		_log.info('Microphone permission status: $micStatus');
 
 		if (micStatus.isDenied) {
-			print('Microphone permission denied');
+			_log.warning('Microphone permission denied');
 		}
 	}
 
-	/// Analyze captured image for blur, brightness, and obstruction
-	Future<Map<String, dynamic>> _analyzeFrame() async {
-		if (_controller == null || !_controller!.value.isInitialized) {
-			return {'success': false};
+	void _appendLocalizedHealthMessages({
+		required CameraHealthEvaluation evaluation,
+		required AppLocalizations l10n,
+		required List<String> alerts,
+		required List<String> results,
+	}) {
+		final metrics = evaluation.metrics;
+
+		if (evaluation.issues.contains(CameraHealthIssue.cameraNotReady)) {
+			alerts.add(l10n.camera_not_ready);
+			return;
 		}
 
-		try {
-			// Let autofocus/exposure settle briefly so capture is less noisy/blurry.
-			await Future.delayed(const Duration(milliseconds: 180));
-			final image = await _controller!.takePicture();
-			final bytes = await image.readAsBytes();
-			final decodedImage = img.decodeImage(bytes);
-
-			if (decodedImage == null) {
-				return {'success': false};
-			}
-
-			// 1. Calculate blur (Laplacian variance)
-			final blurScore = _calculateLaplacianVariance(decodedImage);
-
-			// 2. Calculate dark pixel ratio (lens obstruction)
-			final darkRatio = _calculateDarkPixelRatio(decodedImage);
-
-			// 3. Calculate average brightness (light level)
-			final brightness = _calculateAverageBrightness(decodedImage);
-
-			print('Frame Analysis: blur=$blurScore, darkRatio=$darkRatio, brightness=$brightness');
-
-			return {
-				'success': true,
-				'blurScore': blurScore,
-				'darkRatio': darkRatio,
-				'brightness': brightness,
-			};
-		} catch (e) {
-			print('Frame analysis error: $e');
-			return {'success': false};
+		if (evaluation.issues.contains(CameraHealthIssue.analyzeFailed)) {
+			alerts.add(l10n.health_analyze_failed);
+			return;
 		}
-	}
 
-	/// Convert pixel to normalized luminance (0.0 - 1.0)
-	double _getPixelLuminance(img.Pixel pixel) {
-		// Get RGB values and calculate luminance
-		final r = (pixel.r as int) / 255.0;
-		final g = (pixel.g as int) / 255.0;
-		final b = (pixel.b as int) / 255.0;
-		// Standard luminance formula
-		return (r * 0.299 + g * 0.587 + b * 0.114);
-	}
+		if (metrics == null) return;
 
-	/// Calculate Laplacian variance to detect blur
-	double _calculateLaplacianVariance(img.Image image) {
-		try {
-			// Resize untuk performa
-			final resized = img.copyResize(image, width: 160, height: 90);
-			final grayscale = img.grayscale(resized);
-
-			double sumVariance = 0;
-			int pixelCount = 0;
-
-			// Simple Laplacian approximation: difference between pixel and neighbors
-			for (int y = 1; y < grayscale.height - 1; y++) {
-				for (int x = 1; x < grayscale.width - 1; x++) {
-					try {
-						final center = _getPixelLuminance(grayscale.getPixelSafe(x, y));
-						final left = _getPixelLuminance(grayscale.getPixelSafe(x - 1, y));
-						final right = _getPixelLuminance(grayscale.getPixelSafe(x + 1, y));
-						final top = _getPixelLuminance(grayscale.getPixelSafe(x, y - 1));
-						final bottom = _getPixelLuminance(grayscale.getPixelSafe(x, y + 1));
-
-						// Laplacian kernel: 4*center - sum(neighbors)
-						final laplacian = (4 * center - (left + right + top + bottom)).abs();
-						sumVariance += laplacian * laplacian;
-						pixelCount++;
-					} catch (e) {
-						continue;
-					}
-				}
-			}
-
-			final variance = pixelCount > 0 ? sumVariance / pixelCount : 0.0;
-			print('Blur Analysis(normalized): pixelCount=$pixelCount, variance=$variance');
-			return variance;
-		} catch (e) {
-			print('Laplacian calculation error: $e');
-			return 0;
+		if (evaluation.issues.contains(CameraHealthIssue.movementTooFast)) {
+			alerts.add(l10n.health_alert_too_fast);
+			results.add(l10n.health_blur_bad(metrics.blurScore.toStringAsFixed(3)));
+		} else {
+			results.add(l10n.health_blur_good(metrics.blurScore.toStringAsFixed(3)));
 		}
-	}
 
-	/// Calculate ratio of dark pixels (to detect lens obstruction)
-	double _calculateDarkPixelRatio(img.Image image) {
-		try {
-			final resized = img.copyResize(image, width: 160, height: 90);
-			int darkPixels = 0;
-			int totalPixels = resized.width * resized.height;
-
-			for (int y = 0; y < resized.height; y++) {
-				for (int x = 0; x < resized.width; x++) {
-					final pixel = resized.getPixelSafe(x, y);
-					final brightness = _getPixelLuminance(pixel);
-					// Dark threshold: < 0.2 (20% brightness)
-					if (brightness < 0.2) {
-						darkPixels++;
-					}
-				}
-			}
-
-			final ratio = (darkPixels / totalPixels) * 100;
-			print('Dark pixel ratio: $ratio%');
-			return ratio;
-		} catch (e) {
-			print('Dark pixel calculation error: $e');
-			return 0;
+		if (evaluation.issues.contains(CameraHealthIssue.lowLight)) {
+			alerts.add(l10n.health_alert_dark);
+			results.add(l10n.health_light_bad(metrics.brightness.toStringAsFixed(1)));
+		} else {
+			results.add(l10n.health_light_good(metrics.brightness.toStringAsFixed(1)));
 		}
-	}
 
-	/// Calculate average brightness (for light level detection)
-	double _calculateAverageBrightness(img.Image image) {
-		try {
-			final resized = img.copyResize(image, width: 160, height: 90);
-			double totalBrightness = 0;
-			int pixelCount = resized.width * resized.height;
-
-			for (int y = 0; y < resized.height; y++) {
-				for (int x = 0; x < resized.width; x++) {
-					final pixel = resized.getPixelSafe(x, y);
-					totalBrightness += _getPixelLuminance(pixel);
-				}
-			}
-
-			final avgBrightness = (totalBrightness / pixelCount) * 100;
-			print('Average brightness: $avgBrightness%');
-			return avgBrightness;
-		} catch (e) {
-			print('Brightness calculation error: $e');
-			return 0;
+		if (evaluation.issues.contains(CameraHealthIssue.lensBlocked)) {
+			alerts.add(l10n.health_alert_lens_blocked);
+			results.add(l10n.health_lens_bad(metrics.darkRatio.toStringAsFixed(1)));
+		} else {
+			results.add(l10n.health_lens_good(metrics.darkRatio.toStringAsFixed(1)));
 		}
 	}
 
@@ -307,14 +130,16 @@ class _HomePageState extends State<HomePage> {
 	Future<void> _performCameraHealthCheck() async {
 		if (_isHealthCheckRunning) return;
 		_isHealthCheckRunning = true;
+		final l10n = AppLocalizations.of(context)!;
 
 		try {
 			final cubit = context.read<CameraCubit>();
 			final currentState = cubit.state;
 
+			CameraHealthEvaluation evaluation;
 			// Auto-enable camera if not already active
 			if (!currentState.cameraActive) {
-				print('Kamera belum aktif. Mengaktifkan kamera otomatis...');
+				_log.info('Camera inactive, enabling camera automatically before health check');
 				await cubit.toggleCamera();
 				
 				// Wait for camera to initialize
@@ -327,65 +152,27 @@ class _HomePageState extends State<HomePage> {
 
 			// Check if camera is initialized
 			if (_controller == null || !_controller!.value.isInitialized) {
-				alerts.add('Kamera belum siap. Mohon tunggu...');
-				allPassed = false;
+				evaluation = const CameraHealthEvaluation(
+					issues: [CameraHealthIssue.cameraNotReady],
+				);
 			} else {
 				// SKIP: Check camera orientation using accelerometer
 				// (Accelerometer readings are unreliable for this use case)
-				results.add('✓ Orientasi: Tidak perlu validasi');
-
-				// 2 & 3 & 4: Analyze frame for blur, light level, and obstruction
-				final frameAnalysis = await _analyzeFrame();
-
-				if (frameAnalysis['success'] == true) {
-					final blurScore = frameAnalysis['blurScore'] as double;
-					final darkRatio = frameAnalysis['darkRatio'] as double;
-					final brightness = frameAnalysis['brightness'] as double;
-
-					// Blur score is normalized (usually around 0.0 - 0.3), so use calibrated threshold.
-					// In low light, blur score naturally drops; avoid false negatives by relaxing threshold.
-					final blurThreshold = brightness < 30 ? 0.03 : 0.07;
-					if (blurScore < blurThreshold) {
-						alerts.add('Gerakan terlalu cepat, mohon perlahan');
-						results.add('❌ Blur: Terlalu blur (score: ${blurScore.toStringAsFixed(3)})');
-						allPassed = false;
-					} else {
-						results.add('✓ Blur: Pergerakan stabil (score: ${blurScore.toStringAsFixed(3)})');
-					}
-
-					// Light level: < 30% brightness is too dark
-					if (brightness < 30) {
-						alerts.add('Cahaya terlalu gelap');
-						results.add('❌ Cahaya: Terlalu gelap (${brightness.toStringAsFixed(1)}%)');
-						allPassed = false;
-					} else {
-						results.add('✓ Cahaya: Cukup (${brightness.toStringAsFixed(1)}%)');
-					}
-
-					// Lens obstruction: > 85% dark pixels means blocked
-					if (darkRatio > 85) {
-						alerts.add('Kamera tertutup, periksa lensa');
-						results.add('❌ Lensa: Tertutup (${darkRatio.toStringAsFixed(1)}% dark)');
-						allPassed = false;
-					} else {
-						results.add('✓ Lensa: Bersih (${darkRatio.toStringAsFixed(1)}% dark)');
-					}
-				} else {
-					alerts.add('Gagal menganalisis frame. Coba lagi.');
-					allPassed = false;
-				}
+				results.add(l10n.health_orientation_skipped);
+				evaluation = await _healthCheckService.evaluate(_controller);
 			}
 
-			// Prepare feedback text
-			String feedbackText = allPassed 
-				? 'Kamera siap untuk navigasi!\n${results.join('\n')}'
-				: 'Ada masalah:\n${results.join('\n')}\n\nAksi: ${alerts.join(', ')}';
+			_appendLocalizedHealthMessages(
+				evaluation: evaluation,
+				l10n: l10n,
+				alerts: alerts,
+				results: results,
+			);
+			allPassed = evaluation.isPassed;
 
-			print('=== CAMERA HEALTH CHECK ===');
-			print('Status: ${allPassed ? "PASSED ✓" : "FAILED ✗"}');
-			print(feedbackText);
-			print('===========================');
+			_log.info('Camera health check completed with status: ${allPassed ? 'PASSED' : 'FAILED'}');
 
+			if (!mounted) return;
 			ScaffoldMessenger.of(context).showSnackBar(
 				SnackBar(
 					content: SingleChildScrollView(
@@ -394,7 +181,7 @@ class _HomePageState extends State<HomePage> {
 							mainAxisSize: MainAxisSize.min,
 							children: [
 								Text(
-									allPassed ? '✓ Kamera Siap!' : '⚠ Ada Masalah',
+									allPassed ? l10n.health_ready_title : l10n.health_issues_title,
 									style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
 								),
 								const SizedBox(height: 8),
@@ -407,11 +194,12 @@ class _HomePageState extends State<HomePage> {
 				),
 			);
 
-		} catch (e) {
-			print('Camera health check error: $e');
+		} catch (e, stackTrace) {
+			_log.severe('Camera health check error', e, stackTrace);
+			if (!mounted) return;
 			ScaffoldMessenger.of(context).showSnackBar(
 				SnackBar(
-					content: Text('Error: $e'),
+					content: Text('${l10n.error_prefix}: $e'),
 					duration: const Duration(seconds: 3),
 					backgroundColor: Colors.red,
 				),
@@ -423,7 +211,7 @@ class _HomePageState extends State<HomePage> {
 
 	@override
 	void dispose() {
-		_controller?.dispose();
+		_controller = null;
 		super.dispose();
 	}
 
@@ -438,33 +226,72 @@ class _HomePageState extends State<HomePage> {
 						Positioned.fill(
 							child: BlocBuilder<CameraCubit, dynamic>(
 								buildWhen: (previous, current) {
-									// Only rebuild when cameraActive state changes
+									// Rebuild preview for active/controller/loading transitions.
 									if (previous is CameraState && current is CameraState) {
-										return previous.cameraActive != current.cameraActive;
+										return previous.cameraActive != current.cameraActive ||
+												previous.controller != current.controller ||
+												previous.cameraBusy != current.cameraBusy;
 									}
 									return true;
 								},
 								builder: (context, camState) {
 									final cameraActive = (camState is CameraState) ? camState.cameraActive : false;
+									final cameraBusy = (camState is CameraState) ? camState.cameraBusy : false;
 									final controller = (camState is CameraState) ? camState.controller : null;
 									
 									// Update local reference for health check
 									if (controller != null) {
 										_controller = controller;
+									} else if (!cameraActive) {
+										_controller = null;
 									}
-									
-									// Early exit if camera is off or controller is null
-									if (!cameraActive || controller == null) {
-										return Container(
-											color: Colors.black,
-											child: Center(
-												child: Icon(Icons.camera_alt, color: Colors.white54, size: AppSizes.iconCameraMedium),
-											),
-										);
-									}
-									
-									// Safe camera preview builder
-									return _SafeCameraPreview(controller: controller);
+
+									final placeholder = Container(
+										color: Colors.black,
+										child: Center(
+											child: Icon(Icons.camera_alt, color: Colors.white54, size: AppSizes.iconCameraMedium),
+										),
+									);
+
+									return AnimatedSwitcher(
+										duration: const Duration(milliseconds: 220),
+										switchInCurve: Curves.easeOut,
+										switchOutCurve: Curves.easeIn,
+										child: Stack(
+											key: ValueKey('${cameraActive}_${cameraBusy}_${controller?.hashCode ?? 0}'),
+											fit: StackFit.expand,
+											children: [
+												if (cameraActive && controller != null)
+													SafeCameraPreview(controller: controller)
+												else
+													placeholder,
+												if (cameraBusy)
+													Container(
+															color: Colors.black.withValues(alpha: 0.55),
+														child: Center(
+															child: Column(
+																mainAxisSize: MainAxisSize.min,
+																children: [
+																	SizedBox(
+																		width: 28,
+																		height: 28,
+																		child: CircularProgressIndicator(
+																			strokeWidth: 2.6,
+																			valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+																		),
+																	),
+																	const SizedBox(height: 10),
+																	Text(
+																		AppLocalizations.of(context)?.camera_processing ?? 'Processing camera...',
+																		style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+																	),
+																],
+															),
+														),
+													),
+											],
+										),
+									);
 								},
 							),
 						),
@@ -476,7 +303,7 @@ class _HomePageState extends State<HomePage> {
 							child: Container(
 								padding: EdgeInsets.symmetric(horizontal: AppSizes.paddingMedium, vertical: AppSizes.paddingSmall),
 								decoration: BoxDecoration(
-									color: Colors.white.withOpacity(0.9),
+									color: Colors.white.withValues(alpha: 0.9),
 									borderRadius: BorderRadius.circular(AppSizes.radiusCircle),
 								),
 								child: Row(
@@ -512,7 +339,7 @@ class _HomePageState extends State<HomePage> {
 								child: Container(
 									padding: EdgeInsets.all(AppSizes.paddingSmall),
 									decoration: BoxDecoration(
-										color: Colors.white.withOpacity(0.9),
+										color: Colors.white.withValues(alpha: 0.9),
 										shape: BoxShape.circle,
 									),
 									child: Icon(Icons.settings, color: Colors.black87, size: AppSizes.iconMedium),
@@ -530,10 +357,10 @@ class _HomePageState extends State<HomePage> {
 								decoration: BoxDecoration(
 									color: Colors.white,
 									borderRadius: BorderRadius.circular(AppSizes.radiusLarge),
-									boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 12, offset: Offset(0, 4.h))],
+									boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 12, offset: Offset(0, 4.h))],
 								),
 								child: Text(
-									'1 meter ada laptop depan anda',
+									AppLocalizations.of(context)?.detection_sample ?? 'There is a laptop one meter in front of you',
 									textAlign: TextAlign.center,
 									style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.w600),
 								),
@@ -550,7 +377,7 @@ class _HomePageState extends State<HomePage> {
 								decoration: BoxDecoration(
 									color: Colors.white,
 									borderRadius: BorderRadius.circular(AppSizes.radiusXLarge),
-									boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 16, offset: Offset(0, 4.h))],
+									boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 16, offset: Offset(0, 4.h))],
 								),
 								child: Row(
 									mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -560,10 +387,15 @@ class _HomePageState extends State<HomePage> {
 											builder: (context, camState) {
 												final cubit = context.read<CameraCubit>();
 												final cameraActive = (camState is CameraState) ? camState.cameraActive : false;
+												final cameraBusy = (camState is CameraState) ? camState.cameraBusy : false;
 												return Tooltip(
-													message: cameraActive ? 'Matikan Kamera' : 'Nyalakan Kamera',
+													message: cameraBusy
+															? (AppLocalizations.of(context)?.camera_processing ?? 'Processing camera...')
+															: (cameraActive
+																	? (AppLocalizations.of(context)?.camera_turn_off ?? 'Turn off camera')
+																	: (AppLocalizations.of(context)?.camera_turn_on ?? 'Turn on camera')),
 													child: IconButton(
-														onPressed: () => cubit.toggleCamera(),
+														onPressed: cameraBusy ? null : () => cubit.toggleCamera(),
 														icon: Icon(
 															cameraActive ? Icons.camera_alt : Icons.no_photography,
 															color: cameraActive ? AppColors.primary : Colors.grey,
@@ -582,7 +414,9 @@ class _HomePageState extends State<HomePage> {
 												final cubit = context.read<CameraCubit>();
 												final micActive = (camState is CameraState) ? camState.microphoneActive : false;
 												return Tooltip(
-													message: micActive ? 'Matikan Mikrofon' : 'Nyalakan Mikrofon',
+													message: micActive
+															? (AppLocalizations.of(context)?.mic_turn_off ?? 'Turn off microphone')
+															: (AppLocalizations.of(context)?.mic_turn_on ?? 'Turn on microphone'),
 													child: GestureDetector(
 														onTap: () => cubit.toggleMicrophone(),
 														child: Container(
@@ -591,7 +425,7 @@ class _HomePageState extends State<HomePage> {
 															decoration: BoxDecoration(
 																color: micActive ? AppColors.primary : Colors.grey[300],
 																shape: BoxShape.circle,
-																boxShadow: [BoxShadow(color: (micActive ? AppColors.primary : Colors.grey).withOpacity(0.4), blurRadius: 16, offset: Offset(0, 6.h))],
+																boxShadow: [BoxShadow(color: (micActive ? AppColors.primary : Colors.grey).withValues(alpha: 0.4), blurRadius: 16, offset: Offset(0, 6.h))],
 															),
 															child: Icon(micActive ? Icons.mic : Icons.mic_off, color: micActive ? Colors.white : Colors.grey, size: AppSizes.iconXLarge),
 														),
@@ -605,7 +439,9 @@ class _HomePageState extends State<HomePage> {
 											builder: (context, camState) {
 												final cameraActive = (camState is CameraState) ? camState.cameraActive : false;
 												return Tooltip(
-													message: cameraActive ? 'Cek Kesehatan Kamera' : 'Nyalakan Kamera untuk Cek Kesehatan',
+													message: cameraActive
+															? (AppLocalizations.of(context)?.camera_health_check ?? 'Check camera health')
+															: (AppLocalizations.of(context)?.camera_health_check_enable_hint ?? 'Turn on camera to check health'),
 													child: IconButton(
 														onPressed: _performCameraHealthCheck,
 														icon: Icon(

@@ -145,6 +145,168 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Other'**
   String get other;
+
+  /// No description provided for @camera_permission_required.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera permission is required'**
+  String get camera_permission_required;
+
+  /// No description provided for @camera_processing.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing camera...'**
+  String get camera_processing;
+
+  /// No description provided for @camera_turn_off.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off camera'**
+  String get camera_turn_off;
+
+  /// No description provided for @camera_turn_on.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on camera'**
+  String get camera_turn_on;
+
+  /// No description provided for @mic_turn_off.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off microphone'**
+  String get mic_turn_off;
+
+  /// No description provided for @mic_turn_on.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on microphone'**
+  String get mic_turn_on;
+
+  /// No description provided for @camera_health_check.
+  ///
+  /// In en, this message translates to:
+  /// **'Check camera health'**
+  String get camera_health_check;
+
+  /// No description provided for @camera_health_check_enable_hint.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on camera to check health'**
+  String get camera_health_check_enable_hint;
+
+  /// No description provided for @detection_sample.
+  ///
+  /// In en, this message translates to:
+  /// **'There is a laptop one meter in front of you'**
+  String get detection_sample;
+
+  /// No description provided for @camera_not_ready.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera is not ready. Please wait...'**
+  String get camera_not_ready;
+
+  /// No description provided for @health_orientation_skipped.
+  ///
+  /// In en, this message translates to:
+  /// **'Orientation: Skipped validation'**
+  String get health_orientation_skipped;
+
+  /// No description provided for @health_alert_too_fast.
+  ///
+  /// In en, this message translates to:
+  /// **'Movement too fast, please slow down'**
+  String get health_alert_too_fast;
+
+  /// No description provided for @health_alert_dark.
+  ///
+  /// In en, this message translates to:
+  /// **'Lighting is too dark'**
+  String get health_alert_dark;
+
+  /// No description provided for @health_alert_lens_blocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera is blocked, check the lens'**
+  String get health_alert_lens_blocked;
+
+  /// No description provided for @health_analyze_failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to analyze frame. Please try again.'**
+  String get health_analyze_failed;
+
+  /// No description provided for @health_blur_bad.
+  ///
+  /// In en, this message translates to:
+  /// **'Blur: Too blurry (score: {score})'**
+  String health_blur_bad(Object score);
+
+  /// No description provided for @health_blur_good.
+  ///
+  /// In en, this message translates to:
+  /// **'Blur: Movement is stable (score: {score})'**
+  String health_blur_good(Object score);
+
+  /// No description provided for @health_light_bad.
+  ///
+  /// In en, this message translates to:
+  /// **'Light: Too dark ({percent}%)'**
+  String health_light_bad(Object percent);
+
+  /// No description provided for @health_light_good.
+  ///
+  /// In en, this message translates to:
+  /// **'Light: Sufficient ({percent}%)'**
+  String health_light_good(Object percent);
+
+  /// No description provided for @health_lens_bad.
+  ///
+  /// In en, this message translates to:
+  /// **'Lens: Blocked ({percent}% dark)'**
+  String health_lens_bad(Object percent);
+
+  /// No description provided for @health_lens_good.
+  ///
+  /// In en, this message translates to:
+  /// **'Lens: Clear ({percent}% dark)'**
+  String health_lens_good(Object percent);
+
+  /// No description provided for @health_ready_message.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera is ready for navigation!'**
+  String get health_ready_message;
+
+  /// No description provided for @health_issues_message.
+  ///
+  /// In en, this message translates to:
+  /// **'Issues detected:'**
+  String get health_issues_message;
+
+  /// No description provided for @health_action_label.
+  ///
+  /// In en, this message translates to:
+  /// **'Action'**
+  String get health_action_label;
+
+  /// No description provided for @health_ready_title.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera Ready'**
+  String get health_ready_title;
+
+  /// No description provided for @health_issues_title.
+  ///
+  /// In en, this message translates to:
+  /// **'Issues Found'**
+  String get health_issues_title;
+
+  /// No description provided for @error_prefix.
+  ///
+  /// In en, this message translates to:
+  /// **'Error'**
+  String get error_prefix;
 }
 
 class _AppLocalizationsDelegate

@@ -1,19 +1,24 @@
 import 'package:bloc/bloc.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../../../../shared/core/infrastructure/app_logger.dart';
 import 'camera_state.dart';
+
+final _log = getLogger('CameraCubit');
 
 class CameraCubit extends Cubit<CameraState> {
   CameraCubit() : super(CameraState.initial());
 
-  Future<void> _initCamera() async {
+  bool _isTogglingCamera = false;
+
+  Future<CameraController?> _initCamera() async {
     if (state.controller != null && state.controller!.value.isInitialized) {
-      return;
+      return state.controller;
     }
 
     try {
       final cameras = await availableCameras();
-      if (cameras.isEmpty) return;
+      if (cameras.isEmpty) return null;
       final selectedCamera = cameras.firstWhere(
         (camera) => camera.lensDirection == CameraLensDirection.back,
         orElse: () => cameras.first,
@@ -29,26 +34,40 @@ class CameraCubit extends Cubit<CameraState> {
       await controller.setFocusMode(FocusMode.auto);
       await controller.setExposureMode(ExposureMode.auto);
       await controller.setFlashMode(FlashMode.off);
-      emit(state.copyWith(controller: controller));
+
+      // Cubit may be closed while async init is in progress.
+      if (isClosed) {
+        await controller.dispose();
+        return null;
+      }
+
+      return controller;
     } catch (e) {
-      print('Error initializing camera: $e');
+      _log.severe('Error initializing camera', e);
+      return null;
     }
   }
 
   Future<void> toggleCamera() async {
+    if (_isTogglingCamera || isClosed) return;
+    _isTogglingCamera = true;
+    emit(state.copyWith(cameraBusy: true));
+
     try {
       final camStatus = await Permission.camera.status;
       
       if (camStatus.isDenied) {
-        print('Camera permission denied, requesting...');
+        _log.info('Camera permission denied, requesting');
         final newStatus = await Permission.camera.request();
         if (!newStatus.isGranted) {
-          print('Camera permission not granted');
+          _log.warning('Camera permission not granted');
+          emit(state.copyWith(cameraBusy: false));
           return;
         }
       } else if (camStatus.isPermanentlyDenied) {
-        print('Camera permission permanently denied, opening settings');
+        _log.warning('Camera permission permanently denied, opening settings');
         openAppSettings();
+        emit(state.copyWith(cameraBusy: false));
         return;
       }
 
@@ -61,20 +80,40 @@ class CameraCubit extends Cubit<CameraState> {
         if (oldController != null) {
           try {
             await oldController.dispose();
-            print('Camera disposed successfully');
+            await Future.delayed(const Duration(milliseconds: 120));
+            _log.info('Camera disposed successfully');
           } catch (e) {
-            print('Error disposing camera: $e');
+            _log.warning('Error disposing camera', e);
           }
+        }
+
+        if (!isClosed) {
+          emit(state.copyWith(cameraBusy: false));
         }
       } else {
         // Turn on camera
-        print('Initializing camera...');
-        await _initCamera();
-        emit(state.copyWith(cameraActive: true));
-        print('Camera initialized and active');
+        _log.info('Initializing camera');
+        final controller = await _initCamera();
+        if (controller != null && !isClosed) {
+          emit(
+            state.copyWith(
+              cameraActive: true,
+              controller: controller,
+              cameraBusy: false,
+            ),
+          );
+          _log.info('Camera initialized and active');
+        } else if (!isClosed) {
+          emit(state.copyWith(cameraBusy: false));
+        }
       }
     } catch (e) {
-      print('Error in toggleCamera: $e');
+      _log.severe('Error in toggleCamera', e);
+      if (!isClosed) {
+        emit(state.copyWith(cameraBusy: false));
+      }
+    } finally {
+      _isTogglingCamera = false;
     }
   }
 
@@ -88,14 +127,20 @@ class CameraCubit extends Cubit<CameraState> {
   }
 
   Future<void> stopAll() async {
+    if (isClosed) return;
     try {
-      await state.controller?.dispose();
+      final oldController = state.controller;
+      emit(state.copyWith(cameraActive: false, cameraBusy: true, controller: null));
+      await oldController?.dispose();
     } catch (_) {}
-    emit(CameraState.initial());
+    if (!isClosed) {
+      emit(CameraState.initial());
+    }
   }
 
   @override
-  Future<void> close() {
+  Future<void> close() async {
+    await stopAll();
     return super.close();
   }
 }
