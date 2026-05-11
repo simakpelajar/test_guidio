@@ -1,2 +1,4 @@
 * linguist-vendored
-*.dart -linguist-vendored
+*.dart -linguist-vendored linguist-language=Dart
+lib/**/*.dart -linguist-vendored linguist-language=Dart
+test/**/*.dart -linguist-vendored linguist-language=Dart
