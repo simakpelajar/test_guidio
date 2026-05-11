@@ -1,0 +1,11 @@
+{
+  "@@locale": "id",
+  "mode_detection": "Mode: Deteksi Objek",
+  "greeting": "Selamat datang di Guidio",
+  "status_streaming": "Sedang merekam",
+  "status_stopped": "Berhenti",
+  "mic_start": "Mulai mikrofon",
+  "mic_stop": "Hentikan mikrofon",
+  "camera": "Kamera",
+  "other": "Lainnya"
+}

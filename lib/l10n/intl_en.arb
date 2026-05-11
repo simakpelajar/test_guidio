@@ -1,0 +1,11 @@
+{
+  "@@locale": "en",
+  "mode_detection": "Mode: Object Detection",
+  "greeting": "Welcome to Guidio",
+  "status_streaming": "Streaming",
+  "status_stopped": "Stopped",
+  "mic_start": "Start microphone",
+  "mic_stop": "Stop microphone",
+  "camera": "Camera",
+  "other": "Other",
+}
